@@ -171,6 +171,90 @@ tbody tr:hover { background: var(--bg-hover); }
 .class-Warlock { color: var(--warlock); }
 .class-Warrior { color: var(--warrior); }
 
+/* Section headings (raid/dungeon groups) */
+.section-heading {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.section-heading:first-child {
+  margin-top: 0;
+}
+
+/* Group header rows in tables (type: Raids / Dungeons) */
+.group-header td {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1rem 0.75rem 0.4rem !important;
+  border-bottom: 1px solid var(--gold-dim) !important;
+  background: none !important;
+}
+
+/* Zone header rows in tables (instance name) */
+.zone-header td {
+  color: var(--gold);
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 0.6rem 0.75rem 0.3rem !important;
+  border-bottom: 1px solid var(--border) !important;
+  background: var(--bg-card) !important;
+}
+
+/* Zone heading in card views */
+.zone-heading {
+  color: var(--gold);
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-top: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Optgroup styling */
+select optgroup {
+  color: var(--text-muted);
+  font-style: normal;
+  font-weight: 600;
+}
+
+/* Filter button group */
+.filter-group {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+}
+
+.filter-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 0.4rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.filter-btn:hover {
+  color: var(--text);
+  border-color: var(--gold-dim);
+}
+
+.filter-btn.active {
+  color: var(--gold);
+  border-color: var(--gold-dim);
+  background: var(--bg-hover);
+}
+
 /* Controls */
 .controls {
   margin-bottom: 1rem;

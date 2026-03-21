@@ -211,6 +211,7 @@ const REPORT_QUERY = `query ($code: String!) {
     masterData { actors(type: "Player") { id name type subType server } }
     fights(killType: Encounters) {
       id encounterID name kill startTime endTime difficulty size bossPercentage friendlyPlayers
+      gameZone { id name }
     }
   }}
 }`;

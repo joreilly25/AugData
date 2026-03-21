@@ -116,6 +116,7 @@ query ($code: String!) {
         size
         bossPercentage
         friendlyPlayers
+        gameZone { id name }
       }
     }
   }

@@ -26,6 +26,11 @@
     <section id="view-scaling" class="view active">
       <h2>Spec Scaling</h2>
       <p class="view-desc">Damage % gained per 1% primary stat increase from Ebon Might. Higher elasticity = more value from your buffs.</p>
+      <div id="scaling-filter" class="filter-group">
+        <button class="filter-btn active" data-filter="all">All</button>
+        <button class="filter-btn" data-filter="raid">Raids</button>
+        <button class="filter-btn" data-filter="dungeon">Dungeons</button>
+      </div>
       <table id="scaling-table">
         <thead>
           <tr>
@@ -64,7 +69,7 @@
     <section id="view-contribution" class="view">
       <h2>Aug Contribution</h2>
       <p class="view-desc">How much total damage an Augmentation Evoker's buffs contribute per fight, by encounter.</p>
-      <div id="contribution-cards" class="cards"></div>
+      <div id="contribution-cards"></div>
     </section>
 
     <section id="view-bosses" class="view">

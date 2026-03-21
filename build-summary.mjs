@@ -28,39 +28,144 @@ async function writeJSON(path, data) {
 }
 
 // ---------------------------------------------------------------------------
+// Scaling recomputation — mirrors logic from aug_data.mjs accumulateBuckets
+// ---------------------------------------------------------------------------
+
+const EBON_MIGHT_COEFF = 0.208;
+
+function primaryStatForClass(className) {
+  switch (className) {
+    case "Mage": case "Warlock": case "Priest": case "Evoker": return "intellect";
+    case "Hunter": case "Rogue": case "Monk": case "Demon Hunter": return "agility";
+    case "Warrior": case "Death Knight": case "Paladin": return "strength";
+    default: return null; // Druid, Shaman — pick higher at runtime
+  }
+}
+
+function getPrimaryStat(stats, className) {
+  const fixed = primaryStatForClass(className);
+  if (fixed) return stats[fixed] ?? 0;
+  return Math.max(stats.intellect ?? 0, stats.agility ?? 0, stats.strength ?? 0);
+}
+
+function accumulateScaling(fights, buckets = {}) {
+  for (const fr of fights) {
+    if (!fr.augSourceBreakdown || !fr.playerStats) continue;
+
+    const augInts = [];
+    for (const augId of fr.augActorIds ?? []) {
+      const s = fr.playerStats[augId];
+      if (s) augInts.push(s.intellect);
+    }
+    if (!augInts.length) continue;
+    const avgAugInt = augInts.reduce((a, b) => a + b, 0) / augInts.length;
+    const ebonGrant = avgAugInt * EBON_MIGHT_COEFF;
+
+    const dmgByName = {};
+    const specByName = {};
+    for (const e of fr.allEntries ?? []) {
+      dmgByName[e.name] = e.total ?? 0;
+      specByName[e.name] = e.icon ?? "Unknown";
+    }
+
+    for (const augId of fr.augActorIds ?? []) {
+      const sources = fr.augSourceBreakdown[augId] ?? [];
+      for (const src of sources) {
+        const attributed = src.total ?? 0;
+        if (attributed <= 0) continue;
+        const totalDmg = dmgByName[src.name];
+        if (!totalDmg || totalDmg <= 0) continue;
+        const pStats = Object.values(fr.playerStats).find((p) => p.name === src.name);
+        if (!pStats) continue;
+        const primary = getPrimaryStat(pStats, pStats.class);
+        if (!primary || primary <= 0) continue;
+
+        const specIcon = specByName[src.name] ?? `${pStats.class}-Unknown`;
+        const statIncreasePct = (ebonGrant / primary) * 100;
+        const dmgIncreasePct = (attributed / totalDmg) * 100;
+        const elasticity = dmgIncreasePct / statIncreasePct;
+
+        if (!buckets[specIcon]) {
+          buckets[specIcon] = { totalDamage: 0, totalAttributed: 0, weightedElasticitySum: 0, totalWeight: 0, samples: 0 };
+        }
+        const b = buckets[specIcon];
+        b.totalDamage += totalDmg;
+        b.totalAttributed += attributed;
+        b.weightedElasticitySum += elasticity * totalDmg;
+        b.totalWeight += totalDmg;
+        b.samples += 1;
+      }
+    }
+  }
+  return buckets;
+}
+
+function finalizeScaling(buckets) {
+  const scaling = {};
+  for (const [spec, b] of Object.entries(buckets)) {
+    const avgElasticity = b.totalWeight ? b.weightedElasticitySum / b.totalWeight : 0;
+    scaling[spec] = {
+      spec,
+      avgElasticity: Math.round(avgElasticity * 10000) / 10000,
+      avgAttributionPct: b.totalDamage > 0 ? Math.round((b.totalAttributed / b.totalDamage) * 10000) / 100 : 0,
+      totalDamage: b.totalDamage,
+      totalAttributed: b.totalAttributed,
+      samples: b.samples,
+    };
+  }
+  return scaling;
+}
+
+// Fallback encounter → instance mapping for data collected before gameZone was added
+const INSTANCE_FALLBACK = {
+  // Voidspire Citadel (TWW raid)
+  3176: "Voidspire Citadel", 3177: "Voidspire Citadel", 3178: "Voidspire Citadel",
+  3179: "Voidspire Citadel", 3180: "Voidspire Citadel", 3181: "Voidspire Citadel",
+  3306: "Voidspire Citadel",
+  // Pit of Saron
+  1999: "Pit of Saron", 2000: "Pit of Saron", 2001: "Pit of Saron",
+  // Seat of the Triumvirate
+  2065: "Seat of the Triumvirate", 2066: "Seat of the Triumvirate",
+  2067: "Seat of the Triumvirate", 2068: "Seat of the Triumvirate",
+  // Algeth'ar Academy
+  2562: "Algeth'ar Academy", 2563: "Algeth'ar Academy",
+  2564: "Algeth'ar Academy", 2565: "Algeth'ar Academy",
+  // Windrunner Spire
+  3056: "Windrunner Spire", 3057: "Windrunner Spire",
+  3058: "Windrunner Spire", 3059: "Windrunner Spire",
+  // Magisters' Terrace
+  3071: "Magisters' Terrace", 3072: "Magisters' Terrace",
+  3073: "Magisters' Terrace", 3074: "Magisters' Terrace",
+  // Maisara Caverns
+  3212: "Maisara Caverns", 3213: "Maisara Caverns", 3214: "Maisara Caverns",
+  // Skyreach
+  1698: "Skyreach", 1699: "Skyreach", 1700: "Skyreach", 1701: "Skyreach",
+  // Nexus-Point Xenas
+  3328: "Nexus-Point Xenas", 3332: "Nexus-Point Xenas",
+  3333: "Nexus-Point Xenas",
+};
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
 async function main() {
   await mkdir(SUMMARIES_DIR, { recursive: true });
 
-  // 1. Copy aggregate scaling as-is
-  let specScaling = {};
-  try {
-    specScaling = await readJSON(join(DATA_DIR, "aggregate_scaling.json"));
-  } catch {
-    console.warn("No aggregate_scaling.json found — spec scaling will be empty");
-  }
-  await writeJSON(join(SUMMARIES_DIR, "spec_scaling.json"), specScaling);
-
-  // 2. Read all report.json files
+  // 1. Read all report.json files
   const entries = await readdir(DATA_DIR, { withFileTypes: true });
   const reportDirs = entries.filter(
     (e) => e.isDirectory() && e.name !== "summaries"
   );
 
   // Accumulators
-  // encounterID -> { name, kills, wipes, totalDuration, totalRaidDmg, totalAugAttr, totalFights, augCounts }
   const encSummary = {};
-  // encounterID -> specIcon -> { totalAttr, totalDmg, totalDuration, count }
   const encSpecMatrix = {};
+  // Scaling buckets by content type
+  const scalingBuckets = { all: {}, raid: {}, dungeon: {} };
 
   let totalReports = 0;
   let totalFights = 0;
-  let totalSamples = Object.values(specScaling).reduce(
-    (s, v) => s + (v.samples ?? 0),
-    0
-  );
 
   for (const dir of reportDirs) {
     const reportPath = join(DATA_DIR, dir.name, "report.json");
@@ -94,6 +199,7 @@ async function main() {
         encSummary[encId] = {
           encounterID: encId,
           name: fight.name ?? "Unknown",
+          zoneName: null,
           kills: 0,
           wipes: 0,
           totalDuration: 0,
@@ -101,7 +207,13 @@ async function main() {
           totalAugAttr: 0,
           totalFights: 0,
           augCounts: 0,
+          difficulties: new Set(),
         };
+      }
+      // Capture zone name from gameZone (added to queries) or fallback
+      if (!encSummary[encId].zoneName) {
+        encSummary[encId].zoneName =
+          fight.gameZone?.name || INSTANCE_FALLBACK[encId] || null;
       }
       const es = encSummary[encId];
       es.totalFights++;
@@ -109,8 +221,14 @@ async function main() {
       es.totalRaidDmg += raidTotal;
       es.totalAugAttr += augAttr;
       es.augCounts += augCount;
+      if (fight.difficulty != null) es.difficulties.add(fight.difficulty);
       if (fight.kill) es.kills++;
       else es.wipes++;
+
+      // Accumulate scaling per content type
+      const fightType = [1, 3, 4].includes(fight.difficulty) ? "raid" : "dungeon";
+      accumulateScaling([fight], scalingBuckets.all);
+      accumulateScaling([fight], scalingBuckets[fightType]);
 
       // Per-spec prescience matrix — from augSourceBreakdown
       const dmgByName = {};
@@ -159,6 +277,15 @@ async function main() {
   }
 
   // 3. Finalize encounter_summary.json — filter to encounters with >= 5 fights
+  // Classify encounter type based on difficulty values seen:
+  //   Difficulty 1/3/4 = raid (LFR/Normal/Heroic), 5 alone = dungeon, 108 = delve
+  function classifyEncounter(diffs) {
+    const d = [...diffs];
+    if (d.some((v) => v === 1 || v === 3 || v === 4)) return "raid";
+    if (d.some((v) => v === 108)) return "delve";
+    return "dungeon";
+  }
+
   const encounterSummary = {};
   for (const [id, es] of Object.entries(encSummary)) {
     if (es.totalFights < 5) continue;
@@ -166,6 +293,8 @@ async function main() {
     encounterSummary[id] = {
       encounterID: es.encounterID,
       name: es.name,
+      type: classifyEncounter(es.difficulties),
+      zoneName: es.zoneName || "Unknown",
       kills: es.kills,
       wipes: es.wipes,
       totalFights: es.totalFights,
@@ -213,7 +342,19 @@ async function main() {
     encounterSpecMatrix
   );
 
-  // 5. Meta
+  // 5. Finalize spec scaling — all / raid / dungeon
+  const specScaling = {
+    all: finalizeScaling(scalingBuckets.all),
+    raid: finalizeScaling(scalingBuckets.raid),
+    dungeon: finalizeScaling(scalingBuckets.dungeon),
+  };
+  await writeJSON(join(SUMMARIES_DIR, "spec_scaling.json"), specScaling);
+
+  const totalSamples = Object.values(specScaling.all).reduce(
+    (s, v) => s + (v.samples ?? 0), 0
+  );
+
+  // 6. Meta
   const meta = {
     generatedAt: new Date().toISOString(),
     totalReports,
@@ -227,7 +368,7 @@ async function main() {
   console.log(`  Reports: ${totalReports}`);
   console.log(`  Fights: ${totalFights}`);
   console.log(`  Encounters: ${meta.encounterCount}`);
-  console.log(`  Specs: ${Object.keys(specScaling).length}`);
+  console.log(`  Specs (all): ${Object.keys(specScaling.all).length}`);
   console.log(`  Samples: ${totalSamples}`);
   console.log(`  Output: ${SUMMARIES_DIR}`);
 }

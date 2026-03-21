@@ -112,9 +112,11 @@ function timeAgo(date) {
 // ---------------------------------------------------------------------------
 
 let scalingSort = { key: "avgElasticity", dir: "desc" };
+let scalingFilter = "all";
 
 function renderScalingTable() {
-  const specs = Object.values(data.scaling).filter(
+  const scalingData = data.scaling[scalingFilter] || data.scaling.all || data.scaling;
+  const specs = Object.values(scalingData).filter(
     (s) => !s.spec.includes("Augmentation")
   );
 
@@ -163,9 +165,37 @@ function initScalingSorting() {
   });
 }
 
+function initScalingFilter() {
+  const btns = document.querySelectorAll("#scaling-filter .filter-btn");
+  btns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      btns.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      scalingFilter = btn.dataset.filter;
+      renderScalingTable();
+    });
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Render: Prescience Targets
 // ---------------------------------------------------------------------------
+
+const TYPE_ORDER = ["raid", "dungeon", "delve"];
+const TYPE_LABELS = { raid: "Raids", dungeon: "Dungeons", delve: "Delves" };
+
+/** Groups encounters into type → zoneName → encounters[] */
+function groupByTypeAndZone(encounters) {
+  const result = {};
+  for (const e of encounters) {
+    const t = e.type || "dungeon";
+    const z = e.zoneName || "Unknown";
+    if (!result[t]) result[t] = {};
+    if (!result[t][z]) result[t][z] = [];
+    result[t][z].push(e);
+  }
+  return result;
+}
 
 function renderBossSelect() {
   const select = document.getElementById("boss-select");
@@ -173,9 +203,20 @@ function renderBossSelect() {
     (a, b) => b.totalFights - a.totalFights
   );
 
-  select.innerHTML = encounters
-    .map((e) => `<option value="${e.encounterID}">${e.name}</option>`)
-    .join("");
+  const groups = groupByTypeAndZone(encounters);
+  let html = "";
+  for (const type of TYPE_ORDER) {
+    const zones = groups[type];
+    if (!zones) continue;
+    for (const [zoneName, encs] of Object.entries(zones)) {
+      html += `<optgroup label="${zoneName}">`;
+      html += encs
+        .map((e) => `<option value="${e.encounterID}">${e.name}</option>`)
+        .join("");
+      html += `</optgroup>`;
+    }
+  }
+  select.innerHTML = html;
 
   select.addEventListener("change", () => loadPrescienceTable(select.value));
 
@@ -217,33 +258,46 @@ function renderContributionCards() {
     (a, b) => b.avgAugDPS - a.avgAugDPS
   );
 
-  container.innerHTML = encounters
-    .map(
-      (e) => `<div class="card">
-      <h3>${e.name}</h3>
-      <div class="card-stat highlight">
-        <span class="label">Avg Aug DPS</span>
-        <span class="value">${fmt(e.avgAugDPS)}</span>
-      </div>
-      <div class="card-stat">
-        <span class="label">Avg Attributed</span>
-        <span class="value">${fmt(e.avgAugAttributed)}</span>
-      </div>
-      <div class="card-stat">
-        <span class="label">Aug % of Raid</span>
-        <span class="value">${fmtPct(e.avgAugAttributedPct)}</span>
-      </div>
-      <div class="card-stat">
-        <span class="label">Avg Duration</span>
-        <span class="value">${fmtDuration(e.avgDurationSec)}</span>
-      </div>
-      <div class="card-stat">
-        <span class="label">Fights</span>
-        <span class="value">${e.totalFights}</span>
-      </div>
-    </div>`
-    )
-    .join("");
+  const groups = groupByTypeAndZone(encounters);
+  let html = "";
+  for (const type of TYPE_ORDER) {
+    const zones = groups[type];
+    if (!zones) continue;
+    html += `<h3 class="section-heading">${TYPE_LABELS[type]}</h3>`;
+    for (const [zoneName, encs] of Object.entries(zones)) {
+      html += `<h4 class="zone-heading">${zoneName}</h4>`;
+      html += `<div class="cards">`;
+      html += encs
+        .map(
+          (e) => `<div class="card">
+          <h3>${e.name}</h3>
+          <div class="card-stat highlight">
+            <span class="label">Avg Aug DPS</span>
+            <span class="value">${fmt(e.avgAugDPS)}</span>
+          </div>
+          <div class="card-stat">
+            <span class="label">Avg Attributed</span>
+            <span class="value">${fmt(e.avgAugAttributed)}</span>
+          </div>
+          <div class="card-stat">
+            <span class="label">Aug % of Raid</span>
+            <span class="value">${fmtPct(e.avgAugAttributedPct)}</span>
+          </div>
+          <div class="card-stat">
+            <span class="label">Avg Duration</span>
+            <span class="value">${fmtDuration(e.avgDurationSec)}</span>
+          </div>
+          <div class="card-stat">
+            <span class="label">Fights</span>
+            <span class="value">${e.totalFights}</span>
+          </div>
+        </div>`
+        )
+        .join("");
+      html += `</div>`;
+    }
+  }
+  container.innerHTML = html;
 }
 
 // ---------------------------------------------------------------------------
@@ -255,20 +309,31 @@ function renderBossesTable() {
     (a, b) => b.totalFights - a.totalFights
   );
 
+  const groups = groupByTypeAndZone(encounters);
   const tbody = document.querySelector("#bosses-table tbody");
-  tbody.innerHTML = encounters
-    .map(
-      (e) => `<tr>
-      <td>${e.name}</td>
-      ${numCell(e.totalFights)}
-      ${numCell(e.kills)}
-      ${numCell(fmtDuration(e.avgDurationSec))}
-      ${numCell(fmt(e.avgRaidDPS))}
-      ${numCell(fmt(e.avgAugDPS))}
-      ${numCell(fmtPct(e.avgAugAttributedPct))}
-    </tr>`
-    )
-    .join("");
+  let html = "";
+  for (const type of TYPE_ORDER) {
+    const zones = groups[type];
+    if (!zones) continue;
+    html += `<tr class="group-header"><td colspan="7">${TYPE_LABELS[type]}</td></tr>`;
+    for (const [zoneName, encs] of Object.entries(zones)) {
+      html += `<tr class="zone-header"><td colspan="7">${zoneName}</td></tr>`;
+      html += encs
+        .map(
+          (e) => `<tr>
+          <td>${e.name}</td>
+          ${numCell(e.totalFights)}
+          ${numCell(e.kills)}
+          ${numCell(fmtDuration(e.avgDurationSec))}
+          ${numCell(fmt(e.avgRaidDPS))}
+          ${numCell(fmt(e.avgAugDPS))}
+          ${numCell(fmtPct(e.avgAugAttributedPct))}
+        </tr>`
+        )
+        .join("");
+    }
+  }
+  tbody.innerHTML = html;
 }
 
 // ---------------------------------------------------------------------------
@@ -301,6 +366,7 @@ async function init() {
     renderMeta();
     renderScalingTable();
     initScalingSorting();
+    initScalingFilter();
     renderBossSelect();
     renderContributionCards();
     renderBossesTable();
