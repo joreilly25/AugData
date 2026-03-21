@@ -1,0 +1,271 @@
+/* AugData — Dark WoW-themed dashboard */
+
+:root {
+  --bg: #0d1117;
+  --bg-card: #161b22;
+  --bg-hover: #1c2333;
+  --border: #30363d;
+  --text: #c9d1d9;
+  --text-muted: #8b949e;
+  --gold: #c9a83e;
+  --gold-dim: #8a6d1b;
+  --link: #58a6ff;
+
+  /* WoW class colors */
+  --dk: #C41E3A;
+  --dh: #A330C9;
+  --druid: #FF7C0A;
+  --evoker: #33937F;
+  --hunter: #AAD372;
+  --mage: #3FC7EB;
+  --monk: #00FF98;
+  --paladin: #F48CBA;
+  --priest: #FFFFFF;
+  --rogue: #FFF468;
+  --shaman: #0070DD;
+  --warlock: #8788EE;
+  --warrior: #C79C6E;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+/* Header */
+header {
+  background: linear-gradient(180deg, #161b22 0%, var(--bg) 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 2rem 1.5rem 1rem;
+  text-align: center;
+}
+
+header h1 {
+  color: var(--gold);
+  font-size: 2rem;
+  letter-spacing: 0.05em;
+}
+
+.subtitle {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin-top: 0.25rem;
+}
+
+.meta {
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.meta span { margin: 0 0.75rem; }
+
+/* Nav tabs */
+nav {
+  display: flex;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 1rem 1.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  padding: 0.75rem 1.25rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.tab:hover { color: var(--text); }
+
+.tab.active {
+  color: var(--gold);
+  border-bottom-color: var(--gold);
+}
+
+/* Main content */
+main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.view { display: none; }
+.view.active { display: block; }
+
+.view h2 {
+  color: var(--gold);
+  font-size: 1.3rem;
+  margin-bottom: 0.25rem;
+}
+
+.view-desc {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-bottom: 1.25rem;
+}
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+thead th {
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 2px solid var(--gold-dim);
+  color: var(--gold);
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+thead th[data-type="num"] { text-align: right; }
+
+thead th:hover { color: #e8c84a; }
+thead th.sorted::after { margin-left: 0.3rem; }
+thead th.sorted.asc::after { content: "\25B2"; }
+thead th.sorted.desc::after { content: "\25BC"; }
+
+tbody td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+tbody td[data-type="num"] {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+}
+
+tbody tr:hover { background: var(--bg-hover); }
+
+/* Class-colored spec names */
+.spec-name { font-weight: 500; }
+.class-DeathKnight { color: var(--dk); }
+.class-DemonHunter { color: var(--dh); }
+.class-Druid { color: var(--druid); }
+.class-Evoker { color: var(--evoker); }
+.class-Hunter { color: var(--hunter); }
+.class-Mage { color: var(--mage); }
+.class-Monk { color: var(--monk); }
+.class-Paladin { color: var(--paladin); }
+.class-Priest { color: var(--priest); }
+.class-Rogue { color: var(--rogue); }
+.class-Shaman { color: var(--shaman); }
+.class-Warlock { color: var(--warlock); }
+.class-Warrior { color: var(--warrior); }
+
+/* Controls */
+.controls {
+  margin-bottom: 1rem;
+}
+
+.controls label {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-right: 0.5rem;
+}
+
+.controls select {
+  background: var(--bg-card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  min-width: 220px;
+}
+
+.controls select:focus {
+  outline: none;
+  border-color: var(--gold-dim);
+}
+
+/* Contribution cards */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1.25rem;
+}
+
+.card h3 {
+  color: var(--gold);
+  font-size: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.card-stat {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.3rem 0;
+  font-size: 0.85rem;
+}
+
+.card-stat .label { color: var(--text-muted); }
+
+.card-stat .value {
+  font-variant-numeric: tabular-nums;
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+}
+
+.card-stat.highlight .value {
+  color: var(--gold);
+  font-weight: 600;
+}
+
+/* Footer */
+footer {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  border-top: 1px solid var(--border);
+  margin-top: 3rem;
+}
+
+footer a {
+  color: var(--link);
+  text-decoration: none;
+}
+
+footer a:hover { text-decoration: underline; }
+
+/* Loading state */
+.loading {
+  text-align: center;
+  padding: 3rem;
+  color: var(--text-muted);
+}
+
+/* Responsive */
+@media (max-width: 700px) {
+  nav { flex-wrap: wrap; }
+  .tab { font-size: 0.8rem; padding: 0.6rem 0.75rem; }
+  table { font-size: 0.8rem; }
+  thead th, tbody td { padding: 0.4rem 0.5rem; }
+  .cards { grid-template-columns: 1fr; }
+}

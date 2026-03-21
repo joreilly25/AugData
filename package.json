@@ -2,12 +2,15 @@
   "name": "aug-data",
   "version": "1.0.0",
   "type": "module",
-  "description": "Pull Augmentation Evoker attribution data from Warcraft Logs",
-  "main": "aug_data.mjs",
+  "description": "Augmentation Evoker attribution data from Warcraft Logs",
+  "main": "server.mjs",
   "scripts": {
-    "start": "node aug_data.mjs"
+    "start": "node server.mjs",
+    "build-summary": "node build-summary.mjs",
+    "pipeline": "node pipeline.mjs"
   },
   "dependencies": {
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0"
   }
 }

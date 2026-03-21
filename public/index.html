@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AugData — Augmentation Evoker Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="header-content">
+      <h1>AugData</h1>
+      <p class="subtitle">Augmentation Evoker Attribution Dashboard</p>
+      <div id="meta" class="meta"></div>
+    </div>
+  </header>
+
+  <nav>
+    <button class="tab active" data-view="scaling">Spec Scaling</button>
+    <button class="tab" data-view="prescience">Prescience Targets</button>
+    <button class="tab" data-view="contribution">Aug Contribution</button>
+    <button class="tab" data-view="bosses">Per-Boss Breakdown</button>
+  </nav>
+
+  <main>
+    <section id="view-scaling" class="view active">
+      <h2>Spec Scaling</h2>
+      <p class="view-desc">Damage % gained per 1% primary stat increase from Ebon Might. Higher elasticity = more value from your buffs.</p>
+      <table id="scaling-table">
+        <thead>
+          <tr>
+            <th data-sort="spec">Spec</th>
+            <th data-sort="avgElasticity" data-type="num" class="sorted desc">Elasticity</th>
+            <th data-sort="avgAttributionPct" data-type="num">Attr %</th>
+            <th data-sort="samples" data-type="num">Samples</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section id="view-prescience" class="view">
+      <h2>Prescience Targets</h2>
+      <p class="view-desc">Per-player attributed damage by spec for each boss. Pick the specs that return the most value from your buffs.</p>
+      <div class="controls">
+        <label for="boss-select">Boss:</label>
+        <select id="boss-select"></select>
+      </div>
+      <table id="prescience-table">
+        <thead>
+          <tr>
+            <th>Spec</th>
+            <th data-type="num">Avg Attributed</th>
+            <th data-type="num">Attr DPS</th>
+            <th data-type="num">Avg Total Dmg</th>
+            <th data-type="num">Attr %</th>
+            <th data-type="num">Players</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section id="view-contribution" class="view">
+      <h2>Aug Contribution</h2>
+      <p class="view-desc">How much total damage an Augmentation Evoker's buffs contribute per fight, by encounter.</p>
+      <div id="contribution-cards" class="cards"></div>
+    </section>
+
+    <section id="view-bosses" class="view">
+      <h2>Per-Boss Breakdown</h2>
+      <p class="view-desc">Detailed encounter statistics across all processed reports.</p>
+      <table id="bosses-table">
+        <thead>
+          <tr>
+            <th>Boss</th>
+            <th data-type="num">Fights</th>
+            <th data-type="num">Kills</th>
+            <th data-type="num">Avg Duration</th>
+            <th data-type="num">Avg Raid DPS</th>
+            <th data-type="num">Avg Aug DPS</th>
+            <th data-type="num">Aug %</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+
+  <footer>
+    <p>Data sourced from <a href="https://www.warcraftlogs.com" target="_blank">Warcraft Logs</a></p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

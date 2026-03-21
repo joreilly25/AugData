@@ -22,7 +22,7 @@ import { dirname, join, resolve } from "node:path";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 config({ path: join(__dirname, ".env") });
 
-const DATA_DIR = join(__dirname, "data");
+const DATA_DIR = process.env.DATA_DIR || join(__dirname, "data");
 const TOKEN_URL = "https://www.warcraftlogs.com/oauth/token";
 const API_URL = "https://www.warcraftlogs.com/api/v2/client";
 
