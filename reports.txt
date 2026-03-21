@@ -1,0 +1,60 @@
+# Paste WCL report links here, one per line.
+# Lines starting with # are ignored.
+# Full URLs or just report codes both work.
+#
+# Examples:
+# https://www.warcraftlogs.com/reports/ABC123xyz
+# ABC123xyz
+#
+# 50 reports with Augmentation Evoker + target specs (Affliction, Fire, Arms, Outlaw, Assassination)
+# Spec coverage: affliction=8, fire=10, arms=24, outlaw=13, assassination=8
+https://www.warcraftlogs.com/reports/tKXzav2Q738nx6TW
+https://www.warcraftlogs.com/reports/TQXB8RJHrmDFjgcV
+https://www.warcraftlogs.com/reports/9F7rR3x1gqd6fYaj
+https://www.warcraftlogs.com/reports/jn2GpXqAcLbr1vm3
+https://www.warcraftlogs.com/reports/aRL82CHWK43fJbwd
+https://www.warcraftlogs.com/reports/LbvnajDKhmPH8cJg
+https://www.warcraftlogs.com/reports/KLWRXFZCQgpTb4fw
+https://www.warcraftlogs.com/reports/G7yp8Lcz3ZWn19Mg
+https://www.warcraftlogs.com/reports/QgyMfkAchHvXrtjB
+https://www.warcraftlogs.com/reports/K6vtC9nGJD1gXm82
+https://www.warcraftlogs.com/reports/32cXDz74CrJGnvH8
+https://www.warcraftlogs.com/reports/gC4wx6DNa2HPqmTp
+https://www.warcraftlogs.com/reports/wfZJ1cLFqVApRCgP
+https://www.warcraftlogs.com/reports/Nvagzq7FH39ZyWBb
+https://www.warcraftlogs.com/reports/MtdzpYQN2bgHG19K
+https://www.warcraftlogs.com/reports/wQm7Z2HfXvMhr38L
+https://www.warcraftlogs.com/reports/CkcKqpx6z4VyH3Dd
+https://www.warcraftlogs.com/reports/XJwyYFmZDA6P3RNa
+https://www.warcraftlogs.com/reports/f7MtJ4bm98WyTAYN
+https://www.warcraftlogs.com/reports/6TnGzBA7gR4tadpZ
+https://www.warcraftlogs.com/reports/gN821QyBhFH6tMpb
+https://www.warcraftlogs.com/reports/dBnQTMhwmakPvzqj
+https://www.warcraftlogs.com/reports/nyz1JKbf92kYVjL6
+https://www.warcraftlogs.com/reports/tbwH713XLhfCvgAq
+https://www.warcraftlogs.com/reports/fAG1RXMx9DdVj36p
+https://www.warcraftlogs.com/reports/CpzQ1bgNTc3V9ayL
+https://www.warcraftlogs.com/reports/rCkTWbh6xaRBpFJY
+https://www.warcraftlogs.com/reports/y2RMAwtmaFJdXq8z
+https://www.warcraftlogs.com/reports/Vb1gdLWDBPjhvACz
+https://www.warcraftlogs.com/reports/fQ2RY93k6CMxa8Bq
+https://www.warcraftlogs.com/reports/aWPNtHb2DLx8FQhK
+https://www.warcraftlogs.com/reports/2kjdGDLWxYKB6z3N
+https://www.warcraftlogs.com/reports/Na4qnwMQK31mYWPC
+https://www.warcraftlogs.com/reports/ZmNbFjh6Qg9qPCRd
+https://www.warcraftlogs.com/reports/mQABT3Jq7L2yjhM9
+https://www.warcraftlogs.com/reports/f1KNrbh3ncAtZLM6
+https://www.warcraftlogs.com/reports/MLDbPrZ72gvTFKVt
+https://www.warcraftlogs.com/reports/Ya8GgXbBRc2mJyW4
+https://www.warcraftlogs.com/reports/7jKcNw2z3ZvHAaLn
+https://www.warcraftlogs.com/reports/MDzdg4f2b7cRmX39
+https://www.warcraftlogs.com/reports/Cw9hrntApjK2PRL7
+https://www.warcraftlogs.com/reports/PVg6BtmTFdYNnbGf
+https://www.warcraftlogs.com/reports/jhmP6KabAXBLFcwq
+https://www.warcraftlogs.com/reports/39ycjhaPgpVKHfd1
+https://www.warcraftlogs.com/reports/ZFLM2Yz3NvK9f4yp
+https://www.warcraftlogs.com/reports/ky7jdgHLK6rXcZY9
+https://www.warcraftlogs.com/reports/mj2ZYPrMJy6Tfbcx
+https://www.warcraftlogs.com/reports/YkKD4n3TNhJgGQX8
+https://www.warcraftlogs.com/reports/kKTBQ1NwZ3xLXbyq
+https://www.warcraftlogs.com/reports/WdcXMr86v9pjbLRY

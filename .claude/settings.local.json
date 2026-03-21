@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:www.warcraftlogs.com)",
+      "WebFetch(domain:articles.warcraftlogs.com)",
+      "WebFetch(domain:gist.github.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:forums.combatlogforums.com)",
+      "WebFetch(domain:blog.devgenius.io)",
+      "WebFetch(domain:gptstore.ai)",
+      "WebFetch(domain:www.wowhead.com)",
+      "Bash(node --check pipeline.mjs)"
+    ]
+  }
+}
