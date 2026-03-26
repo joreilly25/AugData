@@ -73,6 +73,10 @@ function accumulateScaling(fights, buckets = {}) {
       for (const src of sources) {
         const attributed = src.total ?? 0;
         if (attributed <= 0) continue;
+        // Skip pets and self-attribution (Aug buffing itself is circular)
+        if (src.type === "Pet") continue;
+        const srcSpec = specByName[src.name] ?? "";
+        if (srcSpec.includes("Augmentation")) continue;
         const totalDmg = dmgByName[src.name];
         if (!totalDmg || totalDmg <= 0) continue;
         const pStats = Object.values(fr.playerStats).find((p) => p.name === src.name);
@@ -354,9 +358,16 @@ async function main() {
     (s, v) => s + (v.samples ?? 0), 0
   );
 
-  // 6. Meta
+  // 6. Meta — only update generatedAt when data actually changed
+  let prevMeta = {};
+  try { prevMeta = await readJSON(join(SUMMARIES_DIR, "meta.json")); } catch {}
+  const dataChanged =
+    totalReports !== prevMeta.totalReports ||
+    totalFights !== prevMeta.totalFights ||
+    totalSamples !== prevMeta.totalSamples;
+
   const meta = {
-    generatedAt: new Date().toISOString(),
+    generatedAt: dataChanged ? new Date().toISOString() : (prevMeta.generatedAt || new Date().toISOString()),
     totalReports,
     totalFights,
     totalSamples,

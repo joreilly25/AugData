@@ -185,7 +185,7 @@ query ($code: String!, $fightID: Int!, $start: Float!, $end: Float!) {
 // Formatting
 // ---------------------------------------------------------------------------
 
-const DIFF_MAP = { 3: "Normal", 4: "Heroic", 5: "Mythic" };
+const DIFF_MAP = { 3: "Normal", 4: "Heroic", 5: "Mythic", 10: "Mythic+" };
 
 function fmtNum(n) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
@@ -356,6 +356,10 @@ function accumulateBuckets(fightResults, existing = {}) {
         const playerName = src.name;
         const attributed = src.total ?? 0;
         if (attributed <= 0) continue;
+        // Skip pets and self-attribution (Aug buffing itself is circular)
+        if (src.type === "Pet") continue;
+        const srcSpec = specByName[playerName] ?? "";
+        if (srcSpec.includes("Augmentation")) continue;
 
         const totalDmg = dmgByName[playerName];
         if (!totalDmg || totalDmg <= 0) continue;

@@ -358,18 +358,42 @@ function initTabs() {
 // Init
 // ---------------------------------------------------------------------------
 
+function renderAll() {
+  renderMeta();
+  renderScalingTable();
+  renderBossSelect();
+  renderContributionCards();
+  renderBossesTable();
+}
+
+function initRefresh() {
+  const btn = document.getElementById("refresh-btn");
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    btn.textContent = "Refreshing…";
+    try {
+      const res = await fetch("/api/refresh", { method: "POST" });
+      if (!res.ok) throw new Error("Refresh failed");
+      await fetchData();
+      renderAll();
+    } catch (err) {
+      alert("Refresh failed: " + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "↻ Refresh";
+    }
+  });
+}
+
 async function init() {
   initTabs();
 
   try {
     await fetchData();
-    renderMeta();
-    renderScalingTable();
+    renderAll();
     initScalingSorting();
     initScalingFilter();
-    renderBossSelect();
-    renderContributionCards();
-    renderBossesTable();
+    initRefresh();
   } catch (err) {
     document.querySelector("main").innerHTML =
       `<div class="loading">Failed to load data: ${err.message}</div>`;

@@ -115,6 +115,20 @@ app.get("/api/encounters/:id/specs", (req, res) => {
   res.json(data);
 });
 
+// Rebuild summaries from existing data and reload into memory
+app.post("/api/refresh", async (req, res) => {
+  try {
+    console.log(`[${ts()}] Manual refresh triggered — rebuilding summaries...`);
+    await runScript("build-summary.mjs");
+    await loadSummaries();
+    console.log(`[${ts()}] Summaries refreshed`);
+    res.json({ ok: true, meta: summaries.meta });
+  } catch (err) {
+    console.error(`[${ts()}] Refresh failed: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Status endpoint for health checks
 app.get("/api/status", (req, res) =>
   res.json({ ok: true, pipelineRunning, lastUpdated: summaries.meta.generatedAt })

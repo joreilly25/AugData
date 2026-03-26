@@ -40,7 +40,7 @@ const PROCESSED_PATH = join(DATA_DIR, "processed_codes.json");
 // ---------------------------------------------------------------------------
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const DIFF_MAP = { 3: "Normal", 4: "Heroic", 5: "Mythic" };
+const DIFF_MAP = { 3: "Normal", 4: "Heroic", 5: "Mythic", 10: "Mythic+" };
 
 function fmtNum(n) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
@@ -309,13 +309,21 @@ function spreadPick(lo, hi, count) {
   return [...new Set(picks)];
 }
 
-async function discoverReportCodes(token, encounters, difficulty, targetSamples) {
+async function discoverReportCodes(token, encounters, difficulties, targetSamples) {
   const allCodes = new Map(); // code -> { encounterName, page }
 
   const perEncounter = Math.ceil(targetSamples / encounters.length);
 
   for (const enc of encounters) {
     console.log(`\n  Probing ${enc.name}...`);
+
+    // Spread samples across all difficulty levels for this encounter
+    const perDiff = Math.ceil(perEncounter / difficulties.length);
+    let codesFromEnc = 0;
+
+    for (const difficulty of difficulties) {
+    const diffTag = difficulties.length > 1 ? ` [+${difficulty}]` : "";
+    console.log(`    Difficulty ${difficulty}...`);
 
     // Fetch page 1 to learn total page count
     const probe = await gql(token, RANKINGS_QUERY, {
@@ -324,7 +332,7 @@ async function discoverReportCodes(token, encounters, difficulty, targetSamples)
 
     const rankings = probe?.worldData?.encounter?.characterRankings;
     if (!rankings?.rankings?.length) {
-      console.log(`    No rankings found`);
+      console.log(`      No rankings found`);
       continue;
     }
 
@@ -333,10 +341,9 @@ async function discoverReportCodes(token, encounters, difficulty, targetSamples)
     const perPage = rankings.rankings.length; // usually 100
     const totalPages = Math.ceil(totalEntries / perPage);
 
-    console.log(`    ${totalEntries} total rankings across ~${totalPages} pages`);
+    console.log(`      ${totalEntries} total rankings across ~${totalPages} pages`);
 
     // Collect codes from page 1
-    let codesFromEnc = 0;
     for (const entry of rankings.rankings) {
       const code = entry.report?.code ?? entry.reportCode ?? entry.reportID;
       if (!code || code.startsWith("a:")) continue;
@@ -347,12 +354,12 @@ async function discoverReportCodes(token, encounters, difficulty, targetSamples)
     }
 
     // Sample additional pages across the spectrum
-    const pages = pickSamplingPages(totalPages, perEncounter, perPage);
+    const pages = pickSamplingPages(totalPages, perDiff, perPage);
     const remaining = pages.filter((p) => p !== 1); // page 1 already done
 
     for (const page of remaining) {
       await sleep(300);
-      process.stdout.write(`    page ${page}/${totalPages}...`);
+      process.stdout.write(`    page ${page}/${totalPages}${diffTag}...`);
 
       const data = await gql(token, RANKINGS_QUERY, {
         encounterID: enc.id, page, difficulty, metric: "dps",
@@ -377,6 +384,8 @@ async function discoverReportCodes(token, encounters, difficulty, targetSamples)
       }
       console.log(` +${newOnPage} new (${allCodes.size} total)`);
     }
+
+    } // end difficulty loop
 
     console.log(`    ${codesFromEnc} unique codes from ${enc.name}`);
   }
@@ -407,15 +416,24 @@ function getPrimaryStat(stats, className) {
   return Math.max(stats.intellect ?? 0, stats.agility ?? 0, stats.strength ?? 0);
 }
 
-async function processReport(code, token) {
+async function processReport(code, token, minTime = 0) {
   const data = await gql(token, REPORT_QUERY, { code }, { exitOnError: false });
   if (!data) return null;
 
   const report = data.reportData.report;
   if (!report) return null;
 
+  // Skip reports older than the time window
+  if (minTime && report.startTime < minTime) return "too_old";
+
   const actors = new Map();
   for (const a of report.masterData.actors) actors.set(a.id, a);
+
+  // Pre-identify Evoker actor IDs so we can skip fights without any
+  const evokerActorIds = new Set();
+  for (const a of report.masterData.actors) {
+    if (a.subType === "Evoker") evokerActorIds.add(a.id);
+  }
 
   const fights = report.fights;
   if (!fights?.length) return null;
@@ -423,6 +441,10 @@ async function processReport(code, token) {
   const fightResults = [];
 
   for (const fight of fights) {
+    // Skip fights that don't include any Evoker — saves 2-3 API calls per fight
+    const friendlyIds = fight.friendlyPlayers ?? [];
+    if (!friendlyIds.some((id) => evokerActorIds.has(id))) continue;
+
     const fdata = await gql(token, FIGHT_TABLE_QUERY, {
       code, fightID: fight.id,
       start: fight.startTime, end: fight.endTime,
@@ -482,9 +504,14 @@ async function processReport(code, token) {
 
     fightResults.push({
       id: fight.id,
+      encounterID: fight.encounterID,
       name: fight.name,
       difficulty: fight.difficulty,
       kill: fight.kill,
+      startTime: fight.startTime,
+      endTime: fight.endTime,
+      duration: fight.endTime - fight.startTime,
+      gameZone: fight.gameZone ?? null,
       raidTotal,
       playerStats,
       augActorIds,
@@ -494,7 +521,23 @@ async function processReport(code, token) {
     });
   }
 
-  return fightResults.length ? fightResults : null;
+  if (!fightResults.length) return null;
+
+  // Save report.json so build-summary can recompute from raw data
+  const reportDir = join(DATA_DIR, code);
+  await mkdir(reportDir, { recursive: true });
+  await writeFile(
+    join(reportDir, "report.json"),
+    JSON.stringify({
+      code,
+      title: report.title,
+      startTime: report.startTime,
+      endTime: report.endTime,
+      fights: fightResults,
+    }, null, 2)
+  );
+
+  return fightResults;
 }
 
 // ---------------------------------------------------------------------------
@@ -530,6 +573,10 @@ function accumulateBuckets(fightResults, existing = {}) {
         const playerName = src.name;
         const attributed = src.total ?? 0;
         if (attributed <= 0) continue;
+        // Skip pets and self-attribution (Aug buffing itself is circular)
+        if (src.type === "Pet") continue;
+        const srcSpec = specByName[playerName] ?? "";
+        if (srcSpec.includes("Augmentation")) continue;
 
         const totalDmg = dmgByName[playerName];
         if (!totalDmg || totalDmg <= 0) continue;
@@ -637,17 +684,29 @@ async function main() {
   const { values } = parseArgs({
     options: {
       zone: { type: "string", short: "z" },
-      difficulty: { type: "string", short: "d", default: "4" },
-      samples: { type: "string", short: "s", default: "200" },
+      mode: { type: "string", short: "m", default: "raid" },
+      difficulty: { type: "string", short: "d" },
+      samples: { type: "string", short: "s", default: "1000" },
+      hours: { type: "string", default: "24" },
       help: { type: "boolean", short: "h" },
     },
   });
 
   if (values.help) {
-    console.log("Usage: node pipeline.mjs [-z zoneID] [-d difficulty] [-s targetReports]");
+    console.log("Usage: node pipeline.mjs [-m mode] [-z zoneID] [-d difficulty] [-s targetReports] [--hours N]");
     console.log("\nFully automated: discovers reports across ranking spectrum, processes them,");
     console.log("and merges into aggregate_scaling.json. Survives rate limits — leave it running.");
+    console.log("\nOptions:");
+    console.log("  -m, --mode   raid or dungeon (default: raid)");
+    console.log("  -d           Difficulty — raid default: 4 (Heroic), dungeon default: 10 (M+)");
+    console.log("  --hours N    Only process reports from the last N hours (default: 24)");
     process.exit(0);
+  }
+
+  const mode = values.mode;
+  if (mode !== "raid" && mode !== "dungeon") {
+    console.error(`Invalid --mode "${mode}". Must be "raid" or "dungeon".`);
+    process.exit(1);
   }
 
   const clientId = process.env.WCL_CLIENT_ID;
@@ -657,8 +716,11 @@ async function main() {
     process.exit(1);
   }
 
-  const difficulty = parseInt(values.difficulty, 10);
+  const defaultDiff = mode === "dungeon" ? "4" : "4";
+  const difficulty = parseInt(values.difficulty ?? defaultDiff, 10);
   const targetSamples = parseInt(values.samples, 10);
+  const maxAgeHours = parseInt(values.hours, 10);
+  const minStartTime = Date.now() - maxAgeHours * 60 * 60 * 1000;
   const diffLabel = DIFF_MAP[difficulty] ?? `diff=${difficulty}`;
 
   await mkdir(DATA_DIR, { recursive: true });
@@ -666,23 +728,38 @@ async function main() {
   console.log(`[${ts()}] Authenticating...`);
   const token = await getAccessToken(clientId, clientSecret);
 
-  // Auto-detect zone — pick the highest zone ID that's an actual raid
-  // (skip "Complete Raids" composites 500+, Mythic+ zones, Delves, etc.)
+  // Auto-detect zone based on mode
   let zoneID;
   if (values.zone) {
     zoneID = parseInt(values.zone, 10);
   } else {
     const data = await gql(token, ZONE_LIST_QUERY, {}, { exitOnError: true });
     let best = null;
-    const skip = /complete raids|mythic\+|delves|challenge|torghast|mage tower|beta/i;
-    for (const exp of data.worldData.expansions) {
-      for (const z of exp.zones) {
-        if (skip.test(z.name)) continue;
-        if (z.id >= 500) continue; // composite zone IDs
-        if (!best || z.id > best.id) best = { ...z, expName: exp.name };
+    const skip = /complete raids|delves|challenge|torghast|mage tower|beta/i;
+
+    if (mode === "dungeon") {
+      // Pick the latest Mythic+ season zone
+      const mplus = /mythic\+/i;
+      for (const exp of data.worldData.expansions) {
+        for (const z of exp.zones) {
+          if (!mplus.test(z.name)) continue;
+          if (!best || z.id > best.id) best = { ...z, expName: exp.name };
+        }
       }
+      if (!best) { console.error("No Mythic+ zone found"); process.exit(1); }
+    } else {
+      // Raid mode — skip M+, composites, etc.
+      for (const exp of data.worldData.expansions) {
+        for (const z of exp.zones) {
+          if (skip.test(z.name)) continue;
+          if (/mythic\+/i.test(z.name)) continue;
+          if (z.id >= 500) continue;
+          if (!best || z.id > best.id) best = { ...z, expName: exp.name };
+        }
+      }
+      if (!best) { console.error("No raid zones found"); process.exit(1); }
     }
-    if (!best) { console.error("No raid zones found"); process.exit(1); }
+
     zoneID = best.id;
     console.log(`Zone: ${best.name} (${best.expName}, id=${zoneID})`);
   }
@@ -693,8 +770,9 @@ async function main() {
     return { zoneName: z.name, encounters: z.encounters };
   })();
 
-  console.log(`${zoneName} — ${diffLabel} — ${encounters.length} encounters`);
-  console.log(`Target: ~${targetSamples} reports, sampled bottom-heavy across rankings\n`);
+  const modeLabel = mode === "dungeon" ? "Dungeon (M+)" : "Raid";
+  console.log(`${zoneName} — ${modeLabel} ${diffLabel} — ${encounters.length} encounters`);
+  console.log(`Target: ~${targetSamples} reports, last ${maxAgeHours}h, sampled across rankings\n`);
 
   // Load state
   const processedCodes = await loadProcessedCodes();
@@ -706,7 +784,23 @@ async function main() {
   // Phase 1: Discover report codes
   console.log(`${"=".repeat(70)}\n  Phase 1: Discovering reports\n${"=".repeat(70)}`);
 
-  const discoveredCodes = await discoverReportCodes(token, encounters, difficulty, targetSamples);
+  // For dungeon mode, sample across key levels 2-10 randomly
+  // For raid mode, use the single difficulty as-is
+  let difficulties;
+  if (mode === "dungeon") {
+    const minKey = 2, maxKey = 10;
+    difficulties = Array.from({ length: maxKey - minKey + 1 }, (_, i) => i + minKey);
+    // Shuffle so we don't always start at +2
+    for (let i = difficulties.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [difficulties[i], difficulties[j]] = [difficulties[j], difficulties[i]];
+    }
+    console.log(`  Sampling key levels: ${difficulties.join(", ")}\n`);
+  } else {
+    difficulties = [difficulty];
+  }
+
+  const discoveredCodes = await discoverReportCodes(token, encounters, difficulties, targetSamples);
   const newCodes = [...discoveredCodes.keys()].filter((c) => !processedCodes.has(c));
 
   console.log(`\nDiscovered ${discoveredCodes.size} total, ${newCodes.length} not yet processed`);
@@ -733,20 +827,23 @@ async function main() {
     process.stdout.write(`${progress} ${code} (${meta?.encounter ?? "?"})... `);
 
     try {
-      const fightResults = await processReport(code, token);
+      const fightResults = await processReport(code, token, minStartTime);
 
-      if (fightResults?.length) {
+      if (fightResults === "too_old") {
+        reportsSkipped++;
+        console.log(`skipped (older than ${maxAgeHours}h)`);
+        processedCodes.add(code);
+      } else if (fightResults?.length) {
         currentBuckets = accumulateBuckets(fightResults, currentBuckets);
         fightsProcessed += fightResults.length;
         reportsProcessed++;
         console.log(`${fightResults.length} fights`);
+        processedCodes.add(code);
       } else {
         reportsSkipped++;
         console.log(`skipped (no aug data)`);
+        processedCodes.add(code);
       }
-
-      // Mark as processed regardless — don't re-attempt reports with no data
-      processedCodes.add(code);
 
       // Persist every 5 reports to avoid losing progress
       const done = reportsProcessed + reportsSkipped;

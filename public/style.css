@@ -65,6 +65,25 @@ header h1 {
 
 .meta span { margin: 0 0.75rem; }
 
+.header-content { position: relative; }
+
+.refresh-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 0.35rem 0.75rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.refresh-btn:hover { color: var(--gold); border-color: var(--gold-dim); }
+.refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* Nav tabs */
 nav {
   display: flex;
