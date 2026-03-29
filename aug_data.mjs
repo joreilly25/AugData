@@ -113,6 +113,7 @@ query ($code: String!) {
         startTime
         endTime
         difficulty
+        keystoneLevel
         size
         bossPercentage
         friendlyPlayers
@@ -148,6 +149,18 @@ query ($code: String!, $fightID: Int!, $start: Float!, $end: Float!) {
       ) {
         data
       }
+      healingTable: table(
+        dataType: Healing
+        fightIDs: [$fightID]
+        startTime: $start
+        endTime: $end
+      )
+      castsTable: table(
+        dataType: Casts
+        fightIDs: [$fightID]
+        startTime: $start
+        endTime: $end
+      )
     }
   }
 }

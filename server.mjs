@@ -24,17 +24,19 @@ const PIPELINE_INTERVAL_MS =
 // Data loading
 // ---------------------------------------------------------------------------
 
-let summaries = { scaling: {}, encounters: {}, specMatrix: {}, meta: {} };
+let summaries = { scaling: {}, encounters: {}, specMatrix: {}, meta: {}, healerMana: {}, encounterHealers: {} };
 
 async function loadSummaries() {
   try {
-    const [scaling, encounters, specMatrix, meta] = await Promise.all([
+    const [scaling, encounters, specMatrix, meta, healerMana, encounterHealers] = await Promise.all([
       readJSON(join(SUMMARIES_DIR, "spec_scaling.json")),
       readJSON(join(SUMMARIES_DIR, "encounter_summary.json")),
       readJSON(join(SUMMARIES_DIR, "encounter_spec_matrix.json")),
       readJSON(join(SUMMARIES_DIR, "meta.json")),
+      readJSON(join(SUMMARIES_DIR, "healer_mana.json")).catch(() => ({})),
+      readJSON(join(SUMMARIES_DIR, "encounter_healer_stats.json")).catch(() => ({})),
     ]);
-    summaries = { scaling, encounters, specMatrix, meta };
+    summaries = { scaling, encounters, specMatrix, meta, healerMana, encounterHealers };
     console.log(
       `[${ts()}] Summaries loaded: ${meta.totalReports} reports, ${meta.totalFights} fights`
     );
@@ -115,6 +117,14 @@ app.get("/api/encounters/:id/specs", (req, res) => {
   res.json(data);
 });
 
+app.get("/api/healer-mana", (req, res) => res.json(summaries.healerMana));
+
+app.get("/api/encounters/:id/healers", (req, res) => {
+  const data = summaries.encounterHealers[req.params.id];
+  if (!data) return res.status(404).json({ error: "Encounter not found" });
+  res.json(data);
+});
+
 // Rebuild summaries from existing data and reload into memory
 app.post("/api/refresh", async (req, res) => {
   try {
@@ -144,7 +154,25 @@ app.listen(PORT, () => {
   console.log(`[${ts()}] AugData dashboard running on port ${PORT}`);
 });
 
-// Run pipeline on startup (delayed 10s to let server start), then on interval
+// Auto-rebuild summaries on interval (picks up data from separate pipeline runs)
+const SUMMARY_INTERVAL_MS =
+  parseInt(process.env.SUMMARY_INTERVAL_MINS || "10", 10) * 60 * 1000;
+
+async function autoRebuildSummaries() {
+  try {
+    console.log(`[${ts()}] Auto-rebuilding summaries...`);
+    await runScript("build-summary.mjs");
+    await loadSummaries();
+    console.log(`[${ts()}] Summaries refreshed`);
+  } catch (err) {
+    console.error(`[${ts()}] Auto-rebuild failed: ${err.message}`);
+  }
+}
+
+setInterval(autoRebuildSummaries, SUMMARY_INTERVAL_MS);
+console.log(`[${ts()}] Summary auto-rebuild every ${SUMMARY_INTERVAL_MS / 60000}m`);
+
+// Optionally run full pipeline on interval if credentials are present
 if (process.env.WCL_CLIENT_ID && process.env.WCL_CLIENT_SECRET) {
   setTimeout(() => runPipelineAndRebuild(), 10_000);
   setInterval(() => runPipelineAndRebuild(), PIPELINE_INTERVAL_MS);

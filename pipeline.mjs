@@ -210,7 +210,7 @@ const REPORT_QUERY = `query ($code: String!) {
     title startTime endTime
     masterData { actors(type: "Player") { id name type subType server } }
     fights(killType: Encounters) {
-      id encounterID name kill startTime endTime difficulty size bossPercentage friendlyPlayers
+      id encounterID name kill startTime endTime difficulty size bossPercentage friendlyPlayers keystoneLevel
       gameZone { id name }
     }
   }}
@@ -222,6 +222,8 @@ query ($code: String!, $fightID: Int!, $start: Float!, $end: Float!) {
     augTable: table(dataType: DamageDone, sourceClass: "Evoker", fightIDs: [$fightID], startTime: $start, endTime: $end)
     fullTable: table(dataType: DamageDone, fightIDs: [$fightID], startTime: $start, endTime: $end)
     combatantInfo: events(dataType: CombatantInfo, fightIDs: [$fightID], startTime: $start, endTime: $end) { data }
+    healingTable: table(dataType: Healing, fightIDs: [$fightID], startTime: $start, endTime: $end)
+    castsTable: table(dataType: Casts, fightIDs: [$fightID], startTime: $start, endTime: $end)
   }}
 }`;
 
@@ -502,11 +504,47 @@ async function processReport(code, token, minTime = 0) {
       }
     }
 
+    // Healer data — casts + healing from the same query (no extra API call)
+    const HEALER_SPECS = new Set([
+      "Priest-Holy", "Priest-Discipline",
+      "Druid-Restoration", "Shaman-Restoration",
+      "Paladin-Holy", "Monk-Mistweaver", "Evoker-Preservation",
+    ]);
+    const healingEntries = freport.healingTable?.data?.entries ?? [];
+    const castsEntries = freport.castsTable?.data?.entries ?? [];
+    const durationSec = (fight.endTime - fight.startTime) / 1000;
+
+    // Build lookup by player name
+    const healingByName = {};
+    for (const e of healingEntries) healingByName[e.name] = e.total ?? 0;
+    const castsByName = {};
+    for (const e of castsEntries) castsByName[e.name] = e.total ?? 0;
+
+    // Collect healer stats — match by spec icon from fullEntries or castsEntries
+    const healerStats = [];
+    const seenHealers = new Set();
+    for (const e of [...castsEntries, ...healingEntries]) {
+      if (seenHealers.has(e.name)) continue;
+      if (!HEALER_SPECS.has(e.icon)) continue;
+      seenHealers.add(e.name);
+      const casts = castsByName[e.name] ?? 0;
+      const healing = healingByName[e.name] ?? 0;
+      healerStats.push({
+        name: e.name,
+        spec: e.icon,
+        casts,
+        healing,
+        cpm: durationSec > 0 ? Math.round(casts / durationSec * 60 * 10) / 10 : 0,
+        hps: durationSec > 0 ? Math.round(healing / durationSec) : 0,
+      });
+    }
+
     fightResults.push({
       id: fight.id,
       encounterID: fight.encounterID,
       name: fight.name,
       difficulty: fight.difficulty,
+      keystoneLevel: fight.keystoneLevel ?? null,
       kill: fight.kill,
       startTime: fight.startTime,
       endTime: fight.endTime,
@@ -518,6 +556,7 @@ async function processReport(code, token, minTime = 0) {
       augSourceBreakdown,
       augEntries,
       allEntries: fullEntries,
+      healerStats,
     });
   }
 
@@ -716,7 +755,7 @@ async function main() {
     process.exit(1);
   }
 
-  const defaultDiff = mode === "dungeon" ? "4" : "4";
+  const defaultDiff = mode === "dungeon" ? "10" : "4";
   const difficulty = parseInt(values.difficulty ?? defaultDiff, 10);
   const targetSamples = parseInt(values.samples, 10);
   const maxAgeHours = parseInt(values.hours, 10);
@@ -738,15 +777,16 @@ async function main() {
     const skip = /complete raids|delves|challenge|torghast|mage tower|beta/i;
 
     if (mode === "dungeon") {
-      // Pick the latest Mythic+ season zone
-      const mplus = /mythic\+/i;
+      // Pick the latest Mythic+ season zone (skip beta/ptr zones)
+      const mplus = /mythic\+ season/i;
       for (const exp of data.worldData.expansions) {
         for (const z of exp.zones) {
           if (!mplus.test(z.name)) continue;
+          if (/beta|ptr/i.test(z.name)) continue;
           if (!best || z.id > best.id) best = { ...z, expName: exp.name };
         }
       }
-      if (!best) { console.error("No Mythic+ zone found"); process.exit(1); }
+      if (!best) { console.error("No Mythic+ season zone found"); process.exit(1); }
     } else {
       // Raid mode — skip M+, composites, etc.
       for (const exp of data.worldData.expansions) {
@@ -770,8 +810,8 @@ async function main() {
     return { zoneName: z.name, encounters: z.encounters };
   })();
 
-  const modeLabel = mode === "dungeon" ? "Dungeon (M+)" : "Raid";
-  console.log(`${zoneName} — ${modeLabel} ${diffLabel} — ${encounters.length} encounters`);
+  const modeLabel = mode === "dungeon" ? "Dungeon (M+)" : "Raid (Normal/Heroic/Mythic)";
+  console.log(`${zoneName} — ${modeLabel} — ${encounters.length} encounters`);
   console.log(`Target: ~${targetSamples} reports, last ${maxAgeHours}h, sampled across rankings\n`);
 
   // Load state
@@ -784,21 +824,9 @@ async function main() {
   // Phase 1: Discover report codes
   console.log(`${"=".repeat(70)}\n  Phase 1: Discovering reports\n${"=".repeat(70)}`);
 
-  // For dungeon mode, sample across key levels 2-10 randomly
-  // For raid mode, use the single difficulty as-is
-  let difficulties;
-  if (mode === "dungeon") {
-    const minKey = 2, maxKey = 10;
-    difficulties = Array.from({ length: maxKey - minKey + 1 }, (_, i) => i + minKey);
-    // Shuffle so we don't always start at +2
-    for (let i = difficulties.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [difficulties[i], difficulties[j]] = [difficulties[j], difficulties[i]];
-    }
-    console.log(`  Sampling key levels: ${difficulties.join(", ")}\n`);
-  } else {
-    difficulties = [difficulty];
-  }
+  // Raid mode: cycle through Normal/Heroic/Mythic. Dungeon mode: just difficulty 10.
+  const difficulties = mode === "raid" ? [3, 4, 5] : [difficulty];
+  console.log(`  Difficulties: ${difficulties.map(d => DIFF_MAP[d] || d).join(", ")}\n`);
 
   const discoveredCodes = await discoverReportCodes(token, encounters, difficulties, targetSamples);
   const newCodes = [...discoveredCodes.keys()].filter((c) => !processedCodes.has(c));

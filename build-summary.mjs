@@ -167,6 +167,9 @@ async function main() {
   const encSpecMatrix = {};
   // Scaling buckets by content type
   const scalingBuckets = { all: {}, raid: {}, dungeon: {} };
+  // Healer stats: { spec → { totalCasts, totalHealing, totalDuration, count } }
+  const healerBuckets = { all: {}, raid: {}, dungeon: {} };
+  const encHealerBuckets = {}; // per-encounter healer stats
 
   let totalReports = 0;
   let totalFights = 0;
@@ -212,6 +215,7 @@ async function main() {
           totalFights: 0,
           augCounts: 0,
           difficulties: new Set(),
+          keystoneLevels: [],
         };
       }
       // Capture zone name from gameZone (added to queries) or fallback
@@ -226,6 +230,7 @@ async function main() {
       es.totalAugAttr += augAttr;
       es.augCounts += augCount;
       if (fight.difficulty != null) es.difficulties.add(fight.difficulty);
+      if (fight.keystoneLevel != null) es.keystoneLevels.push(fight.keystoneLevel);
       if (fight.kill) es.kills++;
       else es.wipes++;
 
@@ -277,6 +282,27 @@ async function main() {
           sm.count++;
         }
       }
+
+      // Accumulate healer stats from healerStats array (added by pipeline)
+      for (const h of fight.healerStats ?? []) {
+        if (!h.spec || h.casts <= 0) continue;
+        for (const bucket of [healerBuckets.all, healerBuckets[fightType]]) {
+          if (!bucket[h.spec]) bucket[h.spec] = { totalCasts: 0, totalHealing: 0, totalDuration: 0, count: 0 };
+          bucket[h.spec].totalCasts += h.casts;
+          bucket[h.spec].totalHealing += h.healing;
+          bucket[h.spec].totalDuration += duration;
+          bucket[h.spec].count++;
+        }
+        if (!encHealerBuckets[encId]) encHealerBuckets[encId] = {};
+        if (!encHealerBuckets[encId][h.spec]) {
+          encHealerBuckets[encId][h.spec] = { totalCasts: 0, totalHealing: 0, totalDuration: 0, count: 0 };
+        }
+        const eb = encHealerBuckets[encId][h.spec];
+        eb.totalCasts += h.casts;
+        eb.totalHealing += h.healing;
+        eb.totalDuration += duration;
+        eb.count++;
+      }
     }
   }
 
@@ -313,6 +339,11 @@ async function main() {
       avgAugDPS: Math.round(es.totalAugAttr / es.totalDuration),
       avgAugCount:
         Math.round((es.augCounts / es.totalFights) * 10) / 10,
+      ...(es.keystoneLevels.length > 0 && {
+        keystoneMin: Math.min(...es.keystoneLevels),
+        keystoneMax: Math.max(...es.keystoneLevels),
+        keystoneAvg: Math.round(es.keystoneLevels.reduce((a, b) => a + b, 0) / es.keystoneLevels.length * 10) / 10,
+      }),
     };
   }
   await writeJSON(join(SUMMARIES_DIR, "encounter_summary.json"), encounterSummary);
@@ -354,6 +385,38 @@ async function main() {
   };
   await writeJSON(join(SUMMARIES_DIR, "spec_scaling.json"), specScaling);
 
+  // 5b. Finalize healer mana pressure stats
+  function finalizeHealerBucket(bucket) {
+    return Object.entries(bucket)
+      .map(([spec, d]) => ({
+        spec,
+        avgCPM: d.totalDuration > 0 ? Math.round(d.totalCasts / d.totalDuration * 60 * 10) / 10 : 0,
+        avgHPS: d.totalDuration > 0 ? Math.round(d.totalHealing / d.totalDuration) : 0,
+        avgHealPerCast: d.totalCasts > 0 ? Math.round(d.totalHealing / d.totalCasts) : 0,
+        count: d.count,
+      }))
+      .sort((a, b) => b.avgCPM - a.avgCPM);
+  }
+
+  const healerMana = {
+    all: finalizeHealerBucket(healerBuckets.all),
+    raid: finalizeHealerBucket(healerBuckets.raid),
+    dungeon: finalizeHealerBucket(healerBuckets.dungeon),
+  };
+  await writeJSON(join(SUMMARIES_DIR, "healer_mana.json"), healerMana);
+
+  // 5c. Per-encounter healer stats
+  const encounterHealerStats = {};
+  for (const [id, specs] of Object.entries(encHealerBuckets)) {
+    if (!encounterSummary[id]) continue;
+    encounterHealerStats[id] = {
+      encounterID: parseInt(id),
+      name: encounterSummary[id].name,
+      healers: finalizeHealerBucket(specs),
+    };
+  }
+  await writeJSON(join(SUMMARIES_DIR, "encounter_healer_stats.json"), encounterHealerStats);
+
   const totalSamples = Object.values(specScaling.all).reduce(
     (s, v) => s + (v.samples ?? 0), 0
   );
@@ -380,6 +443,7 @@ async function main() {
   console.log(`  Fights: ${totalFights}`);
   console.log(`  Encounters: ${meta.encounterCount}`);
   console.log(`  Specs (all): ${Object.keys(specScaling.all).length}`);
+  console.log(`  Healer specs: ${healerMana.all.length}`);
   console.log(`  Samples: ${totalSamples}`);
   console.log(`  Output: ${SUMMARIES_DIR}`);
 }

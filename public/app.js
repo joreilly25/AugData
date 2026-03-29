@@ -61,15 +61,25 @@ function numCell(value) {
 // Data fetching
 // ---------------------------------------------------------------------------
 
-let data = { meta: {}, scaling: {}, encounters: {}, specMatrix: {} };
+let data = { meta: {}, scaling: {}, encounters: {}, specMatrix: {}, healerMana: {}, encounterHealers: {} };
 
 async function fetchData() {
-  const [meta, scaling, encounters] = await Promise.all([
+  const [meta, scaling, encounters, healerMana] = await Promise.all([
     fetch("/api/meta").then((r) => r.json()),
     fetch("/api/scaling").then((r) => r.json()),
     fetch("/api/encounters").then((r) => r.json()),
+    fetch("/api/healer-mana").then((r) => r.json()).catch(() => ({})),
   ]);
-  data = { meta, scaling, encounters, specMatrix: {} };
+  data = { meta, scaling, encounters, specMatrix: {}, healerMana, encounterHealers: {} };
+}
+
+async function fetchEncounterHealers(encId) {
+  if (data.encounterHealers[encId]) return data.encounterHealers[encId];
+  const resp = await fetch(`/api/encounters/${encId}/healers`);
+  if (!resp.ok) return null;
+  const result = await resp.json();
+  data.encounterHealers[encId] = result;
+  return result;
 }
 
 async function fetchSpecMatrix(encId) {
@@ -291,6 +301,10 @@ function renderContributionCards() {
             <span class="label">Fights</span>
             <span class="value">${e.totalFights}</span>
           </div>
+          ${e.keystoneAvg ? `<div class="card-stat">
+            <span class="label">Key Level</span>
+            <span class="value">+${e.keystoneMin}–${e.keystoneMax} (avg +${e.keystoneAvg})</span>
+          </div>` : ""}
         </div>`
         )
         .join("");
@@ -315,9 +329,9 @@ function renderBossesTable() {
   for (const type of TYPE_ORDER) {
     const zones = groups[type];
     if (!zones) continue;
-    html += `<tr class="group-header"><td colspan="7">${TYPE_LABELS[type]}</td></tr>`;
+    html += `<tr class="group-header"><td colspan="8">${TYPE_LABELS[type]}</td></tr>`;
     for (const [zoneName, encs] of Object.entries(zones)) {
-      html += `<tr class="zone-header"><td colspan="7">${zoneName}</td></tr>`;
+      html += `<tr class="zone-header"><td colspan="8">${zoneName}</td></tr>`;
       html += encs
         .map(
           (e) => `<tr>
@@ -328,12 +342,129 @@ function renderBossesTable() {
           ${numCell(fmt(e.avgRaidDPS))}
           ${numCell(fmt(e.avgAugDPS))}
           ${numCell(fmtPct(e.avgAugAttributedPct))}
+          ${numCell(e.keystoneAvg ? `+${e.keystoneMin}–${e.keystoneMax}` : "—")}
         </tr>`
         )
         .join("");
     }
   }
   tbody.innerHTML = html;
+}
+
+// ---------------------------------------------------------------------------
+// Render: Healer Mana Pressure
+// ---------------------------------------------------------------------------
+
+let healerSort = { key: "avgCPM", dir: "desc" };
+let healerFilter = "all";
+
+function renderHealerTable() {
+  const healers = data.healerMana[healerFilter] ?? data.healerMana.all ?? [];
+  const sorted = [...healers];
+
+  sorted.sort((a, b) => {
+    const av = a[healerSort.key];
+    const bv = b[healerSort.key];
+    if (typeof av === "string") {
+      return healerSort.dir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+    }
+    return healerSort.dir === "asc" ? av - bv : bv - av;
+  });
+
+  const tbody = document.querySelector("#healer-table tbody");
+  tbody.innerHTML = sorted
+    .map(
+      (h) => `<tr>
+      <td>${specCell(h.spec)}</td>
+      ${numCell(h.avgCPM.toFixed(1))}
+      ${numCell(fmt(h.avgHPS))}
+      ${numCell(fmt(h.avgHealPerCast))}
+      ${numCell(h.count.toLocaleString())}
+    </tr>`
+    )
+    .join("");
+
+  document.querySelectorAll("#healer-table th").forEach((th) => {
+    th.classList.remove("sorted", "asc", "desc");
+    if (th.dataset.sort === healerSort.key) {
+      th.classList.add("sorted", healerSort.dir);
+    }
+  });
+}
+
+function initHealerSorting() {
+  document.querySelectorAll("#healer-table th[data-sort]").forEach((th) => {
+    th.addEventListener("click", () => {
+      const key = th.dataset.sort;
+      if (healerSort.key === key) {
+        healerSort.dir = healerSort.dir === "desc" ? "asc" : "desc";
+      } else {
+        healerSort.key = key;
+        healerSort.dir = th.dataset.type === "num" ? "desc" : "asc";
+      }
+      renderHealerTable();
+    });
+  });
+}
+
+function initHealerFilter() {
+  const btns = document.querySelectorAll("#healer-filter .filter-btn");
+  btns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      btns.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      healerFilter = btn.dataset.filter;
+      renderHealerTable();
+    });
+  });
+}
+
+function renderHealerBossSelect() {
+  const select = document.getElementById("healer-boss-select");
+  const encounters = Object.values(data.encounters).sort(
+    (a, b) => b.totalFights - a.totalFights
+  );
+
+  const groups = groupByTypeAndZone(encounters);
+  let html = "";
+  for (const type of TYPE_ORDER) {
+    const zones = groups[type];
+    if (!zones) continue;
+    for (const [zoneName, encs] of Object.entries(zones)) {
+      html += `<optgroup label="${zoneName}">`;
+      html += encs
+        .map((e) => `<option value="${e.encounterID}">${e.name}</option>`)
+        .join("");
+      html += `</optgroup>`;
+    }
+  }
+  select.innerHTML = html;
+
+  select.addEventListener("change", () => loadHealerEncounterTable(select.value));
+  if (encounters.length) loadHealerEncounterTable(encounters[0].encounterID);
+}
+
+async function loadHealerEncounterTable(encId) {
+  const tbody = document.querySelector("#healer-encounter-table tbody");
+  tbody.innerHTML = '<tr><td colspan="5" class="loading">Loading...</td></tr>';
+
+  const result = await fetchEncounterHealers(encId);
+  if (!result || !result.healers?.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="loading">No healer data for this encounter</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = result.healers
+    .map(
+      (h) => `<tr>
+      <td>${specCell(h.spec)}</td>
+      ${numCell(h.avgCPM.toFixed(1))}
+      ${numCell(fmt(h.avgHPS))}
+      ${numCell(fmt(h.avgHealPerCast))}
+      ${numCell(h.count.toLocaleString())}
+    </tr>`
+    )
+    .join("");
 }
 
 // ---------------------------------------------------------------------------
@@ -364,6 +495,8 @@ function renderAll() {
   renderBossSelect();
   renderContributionCards();
   renderBossesTable();
+  renderHealerTable();
+  renderHealerBossSelect();
 }
 
 function initRefresh() {
@@ -393,6 +526,8 @@ async function init() {
     renderAll();
     initScalingSorting();
     initScalingFilter();
+    initHealerSorting();
+    initHealerFilter();
     initRefresh();
   } catch (err) {
     document.querySelector("main").innerHTML =

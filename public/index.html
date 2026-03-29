@@ -21,6 +21,7 @@
     <button class="tab" data-view="prescience">Prescience Targets</button>
     <button class="tab" data-view="contribution">Aug Contribution</button>
     <button class="tab" data-view="bosses">Per-Boss Breakdown</button>
+    <button class="tab" data-view="healers">Healer Mana Pressure</button>
   </nav>
 
   <main>
@@ -86,11 +87,51 @@
             <th data-type="num">Avg Raid DPS</th>
             <th data-type="num">Avg Aug DPS</th>
             <th data-type="num">Aug %</th>
+            <th data-type="num">Key Level</th>
           </tr>
         </thead>
         <tbody></tbody>
       </table>
     </section>
+    <section id="view-healers" class="view">
+      <h2>Healer Mana Pressure</h2>
+      <p class="view-desc">Which healer specs cast the most and burn through mana fastest — higher CPM = more mana hungry = better Source of Magic target.</p>
+      <div id="healer-filter" class="filter-group">
+        <button class="filter-btn active" data-filter="all">All</button>
+        <button class="filter-btn" data-filter="raid">Raids</button>
+        <button class="filter-btn" data-filter="dungeon">Dungeons</button>
+      </div>
+      <table id="healer-table">
+        <thead>
+          <tr>
+            <th data-sort="spec">Healer Spec</th>
+            <th data-sort="avgCPM" data-type="num" class="sorted desc">Casts/Min</th>
+            <th data-sort="avgHPS" data-type="num">HPS</th>
+            <th data-sort="avgHealPerCast" data-type="num">Heal/Cast</th>
+            <th data-sort="count" data-type="num">Samples</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <h3 class="section-heading">Per-Encounter Breakdown</h3>
+      <div class="controls">
+        <label for="healer-boss-select">Boss:</label>
+        <select id="healer-boss-select"></select>
+      </div>
+      <table id="healer-encounter-table">
+        <thead>
+          <tr>
+            <th>Healer Spec</th>
+            <th data-type="num">Casts/Min</th>
+            <th data-type="num">HPS</th>
+            <th data-type="num">Heal/Cast</th>
+            <th data-type="num">Samples</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
   </main>
 
   <footer>
