@@ -16,9 +16,9 @@ const DATA_DIR = process.env.DATA_DIR || join(__dirname, "data");
 const SUMMARIES_DIR = join(DATA_DIR, "summaries");
 const PORT = process.env.PORT || 3000;
 
-// Pipeline interval (default 6 hours)
+// Pipeline interval (default 24 hours — once daily)
 const PIPELINE_INTERVAL_MS =
-  parseInt(process.env.PIPELINE_INTERVAL_HOURS || "6", 10) * 60 * 60 * 1000;
+  parseInt(process.env.PIPELINE_INTERVAL_HOURS || "24", 10) * 60 * 60 * 1000;
 
 // ---------------------------------------------------------------------------
 // Data loading
@@ -172,9 +172,9 @@ async function autoRebuildSummaries() {
 setInterval(autoRebuildSummaries, SUMMARY_INTERVAL_MS);
 console.log(`[${ts()}] Summary auto-rebuild every ${SUMMARY_INTERVAL_MS / 60000}m`);
 
-// Optionally run full pipeline on interval if credentials are present
+// Optionally run full pipeline on a daily interval if credentials are present
 if (process.env.WCL_CLIENT_ID && process.env.WCL_CLIENT_SECRET) {
-  setTimeout(() => runPipelineAndRebuild(), 10_000);
+  // Run on interval only (no startup run — avoids triggering on every deploy)
   setInterval(() => runPipelineAndRebuild(), PIPELINE_INTERVAL_MS);
   console.log(
     `[${ts()}] Pipeline scheduled every ${PIPELINE_INTERVAL_MS / 3600000}h`
