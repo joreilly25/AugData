@@ -153,6 +153,13 @@ async function gql(token, query, variables = {}, { exitOnError = false } = {}) {
       continue;
     }
 
+    if (resp.status === 502 || resp.status === 503) {
+      const wait = Math.min(2 ** attempt * 5000, 60_000);
+      console.log(`  [${ts()}] API ${resp.status} — retrying in ${Math.round(wait / 1000)}s (attempt ${attempt + 1})...`);
+      await sleep(wait);
+      continue;
+    }
+
     if (!resp.ok) {
       const body = await resp.text();
       if (exitOnError) throw new Error(`API ${resp.status}: ${body}`);
